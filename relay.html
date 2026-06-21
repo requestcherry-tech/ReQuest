@@ -190,14 +190,22 @@
   /* ─── CHAT BUBBLES (copied from runner.html so DM + delivery
      chat threads look pixel-identical to the existing rider chat) ── */
   .chat-thread { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-  .chat-bubble { max-width: 74%; padding: 10px 14px; border-radius: 14px; font-size: 0.87rem; line-height: 1.4; }
+  .chat-bubble { max-width: 74%; padding: 10px 14px; border-radius: 14px; font-size: 0.87rem; line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
   .chat-bubble.me   { align-self: flex-end;   background: var(--orange); color: #fff; border-bottom-right-radius: 4px; }
   .chat-bubble.them { align-self: flex-start; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
   .chat-meta { font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
   .chat-bubble.me .chat-meta { color: rgba(255,255,255,.75); text-align: right; }
   .chat-empty { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 32px 0; margin: auto; }
-  .chat-input-row { display: flex; gap: 10px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); align-items: center; }
+  .chat-input-row { display: flex; gap: 10px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); align-items: flex-end; }
   .chat-input-row .form-input { flex: 1; }
+  .chat-input-row textarea#messageInput {
+    resize: none;               /* no manual drag-handle — height is automatic */
+    overflow-y: auto;
+    max-height: 120px;          /* roughly 5 lines, then it scrolls internally */
+    line-height: 1.4;
+    overflow-wrap: anywhere;    /* wraps long no-space text too, same as chat bubbles */
+    word-break: break-word;
+  }
 
   /* ─── ORDER INFO BAR (reuses home.html's confirm-section look) ── */
   .confirm-section { background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -415,8 +423,9 @@
         <div id="deliveryOrderBar"></div>
         <div class="chat-thread" id="threadBody"></div>
         <div class="chat-input-row">
-          <input type="text" class="form-input" id="messageInput" placeholder="Type a message…"
-                 onkeydown="if(event.key==='Enter')sendMessage()" />
+          <textarea class="form-input" id="messageInput" placeholder="Type a message…" rows="1"
+                    oninput="autoResizeComposer(this)"
+                    onkeydown="handleComposerKeydown(event)"></textarea>
           <button class="relay-send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
@@ -1300,11 +1309,28 @@ function renderMessages(snap) {
   body.scrollTop = body.scrollHeight;
 }
 
+// Grows the composer as the user types past one line, capped by the
+// max-height set in CSS (after that it scrolls internally instead).
+window.autoResizeComposer = function (el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+};
+
+// Enter sends the message (like most chat apps); Shift+Enter inserts
+// an actual line break instead, for people composing longer messages.
+window.handleComposerKeydown = function (event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+};
+
 window.sendMessage = async function () {
   const input = document.getElementById('messageInput');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  input.style.height = 'auto'; // collapse back to one line after sending
 
   const btn = document.getElementById('sendBtn');
   btn.disabled = true;
@@ -1318,6 +1344,7 @@ window.sendMessage = async function () {
     console.error(err);
     showToast('Message failed to send', 'error');
     input.value = text; // give the text back so nothing is lost
+    autoResizeComposer(input);
   } finally {
     btn.disabled = false;
     input.focus();
