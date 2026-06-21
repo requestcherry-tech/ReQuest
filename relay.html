@@ -473,12 +473,6 @@ import {
   collection, query, where, orderBy, limit,
   onSnapshot, serverTimestamp, increment, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {
-  getStorage,
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 /* ── Firebase Config — same project used across Re:Quest ── */
 const firebaseConfig = {
@@ -493,7 +487,6 @@ const firebaseConfig = {
 const app     = initializeApp(firebaseConfig);
 const auth    = getAuth(app);
 const db      = getFirestore(app);
-const storage = getStorage(app);
 
 /* ── State ─────────────────────────────────────────────── */
 let currentUser   = null;
@@ -602,6 +595,18 @@ function resizeImageToBlob(file, maxDim = 480, quality = 0.85) {
     img.src = objectUrl;
   });
 }
+
+// Converts a Blob to a "data:image/jpeg;base64,..." string — saved
+// straight into the Firestore doc as a plain string field, same as
+// home.html, so no separate file-storage service is involved.
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read image'));
+    reader.readAsDataURL(blob);
+  });
+}
 function profileRow(label, val) {
   return `<div class="profile-info-row"><span class="profile-info-label">${label}</span><span class="profile-info-val">${escapeHtml(val)}</span></div>`;
 }
@@ -706,9 +711,11 @@ function renderMyProfileCard() {
 }
 
 // Triggered by picking a file in the hidden <input type="file"> behind
-// the "+" button. Same resize → upload → save-to-Firestore flow as
-// home.html, so re-opening either page shows the same photo (they both
-// just read/write the same `users/{uid}.photoURL` field).
+// the "+" button. Same resize → save-to-Firestore flow as home.html
+// (no separate file-storage service — Cloud Storage requires the
+// project to be on a paid Firebase plan), so re-opening either page
+// shows the same photo since they both just read/write the same
+// `users/{uid}.photoURL` field.
 window.handleAvatarFileChange = async function (event) {
   const file = event.target.files[0];
   event.target.value = '';
@@ -727,19 +734,31 @@ window.handleAvatarFileChange = async function (event) {
   refreshAvatarWrap();
 
   try {
-    const blob = await resizeImageToBlob(file, 480, 0.85);
-    const fileRef = storageRef(storage, `profile-pictures/${currentUser.uid}.jpg`);
-    await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
-    const url = await getDownloadURL(fileRef);
-    const freshUrl = `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    let blob = await resizeImageToBlob(file, 480, 0.85);
 
-    await setDoc(doc(db, 'users', currentUser.uid), { photoURL: freshUrl }, { merge: true });
-    userProfile = { ...(userProfile || {}), photoURL: freshUrl };
+    // Belt-and-suspenders for unusually "busy"/noisy photos that don't
+    // compress as well — fall back to a smaller, lower-quality resize
+    // rather than risk pushing the Firestore document over its 1MB cap.
+    if (blob.size > 700 * 1024) {
+      blob = await resizeImageToBlob(file, 320, 0.7);
+    }
+    if (blob.size > 700 * 1024) {
+      throw new Error('TOO_BIG_AFTER_RESIZE');
+    }
+
+    const dataUrl = await blobToDataURL(blob);
+
+    await setDoc(doc(db, 'users', currentUser.uid), { photoURL: dataUrl }, { merge: true });
+    userProfile = { ...(userProfile || {}), photoURL: dataUrl };
 
     showToast('✓ Profile picture updated', 'success');
   } catch (err) {
-    console.error('Avatar upload failed:', err);
-    showToast('Could not upload your photo — try again', 'error');
+    console.error('Avatar update failed:', err);
+    if (err.message === 'TOO_BIG_AFTER_RESIZE') {
+      showToast('That photo is too detailed to save — try a simpler one', 'error');
+    } else {
+      showToast('Could not save your photo — try again', 'error');
+    }
   } finally {
     avatarUploading = false;
     refreshAvatarWrap();
