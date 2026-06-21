@@ -682,6 +682,28 @@
       color: #fff; font-weight: 800; font-size: 1.3rem;
       flex-shrink: 0;
     }
+
+    /* ── "My Profile" avatar with the upload (+) button ────
+       Only used for the signed-in user's OWN avatar — other
+       students' avatars elsewhere stay plain (read-only). ── */
+    .my-avatar-wrap { position: relative; flex-shrink: 0; }
+    .avatar-edit-btn {
+      position: absolute; bottom: -2px; right: -2px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--orange); color: #fff; border: 2.5px solid var(--surface);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.95rem; font-weight: 800; line-height: 1; padding: 0;
+      cursor: pointer; box-shadow: var(--shadow-sm);
+      transition: transform .15s, background .15s;
+    }
+    .avatar-edit-btn:hover  { background: var(--orange-dark); transform: scale(1.08); }
+    .avatar-edit-btn.is-busy { cursor: wait; }
+    .avatar-spinner {
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+      animation: avatarSpin .7s linear infinite;
+    }
+    @keyframes avatarSpin { to { transform: rotate(360deg); } }
     .profile-name { font-size: 1.05rem; font-weight: 700; margin-bottom: 2px; }
     .profile-sub { font-size: 0.78rem; color: var(--muted); }
     .profile-info-list {
@@ -1645,6 +1667,12 @@ import {
   deleteDoc,
   doc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 /* ── Firebase Config ───────────────────────────────────── */
 // Same project used in index.html (request-f183d).
@@ -1660,9 +1688,10 @@ const firebaseConfig = {
   appId:             "G-J1K0VM2XGF"
 };
 
-const app  = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
+const app     = initializeApp(firebaseConfig);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
 
 /* ── State ─────────────────────────────────────────────── */
 let currentUser   = null;
@@ -1671,6 +1700,7 @@ let cart          = [];
 let selectedStore = null;   // the store currently being viewed on pageMenu
 let searchQuery   = '';
 let storeSearchQuery = '';  // search text on the pageStores stall list
+let avatarUploading = false; // true while a new profile picture is mid-upload
 
 /* ── Borrow / SOS Board state ───────────────────────────── */
 let pendingAcceptId    = null; // id of the request waiting on the confirm dialog
@@ -2054,11 +2084,10 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ── Populate UI from user profile ────────────────────── */
 function populateUserUI() {
-  const name     = userProfile?.fullName || currentUser.displayName || 'Student';
-  const initials = name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase();
+  const name = userProfile?.fullName || currentUser.displayName || 'Student';
 
-  // Avatar initials
-  document.getElementById('homeAvatar').textContent = initials;
+  // Avatar (photo if the student has uploaded one, initials otherwise)
+  document.getElementById('homeAvatar').innerHTML = avatarInner(name, userProfile?.photoURL);
 
   // Pre-fill checkout form with account info
   document.getElementById('confirmName').value     = name;
@@ -2092,6 +2121,53 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function initials(name) {
+  return (name || '?').trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase();
+}
+
+// Returns what goes INSIDE an avatar circle: a cover-fit <img> if a
+// profile picture is set, otherwise the same initials fallback as
+// before. The fallback also kicks in if the image URL ever 404s.
+function avatarInner(name, photoURL) {
+  if (photoURL) {
+    return `<img src="${photoURL}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block" onerror="this.outerHTML='${initials(name)}'" />`;
+  }
+  return initials(name);
+}
+
+// Downsizes a picked image file so its longest edge is at most maxDim
+// pixels and re-encodes it as a JPEG Blob. A profile picture doesn't
+// need to be full camera resolution — this keeps uploads fast and the
+// stored file small.
+function resizeImageToBlob(file, maxDim = 480, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > height && width > maxDim) {
+        height = Math.round(height * (maxDim / width));
+        width = maxDim;
+      } else if (height >= width && height > maxDim) {
+        width = Math.round(width * (maxDim / height));
+        height = maxDim;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => blob ? resolve(blob) : reject(new Error('Could not process image')),
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read image')); };
+    img.src = objectUrl;
+  });
+}
+
 // Computes whole-years age from the "YYYY-MM-DD" birthdate string
 // stored in Firestore, accounting for whether this year's birthday
 // has happened yet. Returns null if there's no birthdate on file.
@@ -2106,16 +2182,30 @@ function calculateAge(birthdateStr) {
   return age;
 }
 
+// The "My Profile" avatar circle + its "+" upload button/spinner.
+// Pulled into its own function so an in-progress upload can refresh
+// just this piece (see handleAvatarFileChange) without re-rendering
+// the whole modal and clobbering an unsaved bio edit in progress.
+function avatarWrapHtml(name) {
+  return `
+    <div class="my-avatar-wrap">
+      <div class="profile-avatar-lg" id="myAvatarCircle">${avatarInner(name, userProfile?.photoURL)}</div>
+      ${avatarUploading
+        ? `<div class="avatar-edit-btn is-busy"><span class="avatar-spinner"></span></div>`
+        : `<button type="button" class="avatar-edit-btn" onclick="document.getElementById('avatarFileInput').click()" title="Change profile picture">+</button>`}
+      <input type="file" accept="image/*" id="avatarFileInput" class="hidden" onchange="handleAvatarFileChange(event)" />
+    </div>`;
+}
+
 window.toggleProfile = function () {
   const name    = userProfile?.fullName || currentUser?.displayName || 'Student';
-  const initials = name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase();
   const bio     = userProfile?.bio || '';
   const age     = calculateAge(userProfile?.birthdate);
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark';
 
   document.getElementById('profileModalContent').innerHTML = `
     <div class="profile-header">
-      <div class="profile-avatar-lg">${initials}</div>
+      ${avatarWrapHtml(name)}
       <div>
         <div class="profile-name">${name}</div>
         <div class="profile-sub">${userProfile?.email || currentUser?.email || ''}</div>
@@ -2210,6 +2300,61 @@ window.closeProfileModal = function (e) {
     document.getElementById('profileModal').classList.remove('open');
   }
 };
+
+// Triggered by picking a file in the hidden <input type="file"> behind
+// the "+" button on the avatar. Resizes the image client-side, uploads
+// it to Firebase Storage at a stable per-student path (so re-uploading
+// just overwrites the old photo instead of piling up orphaned files),
+// then saves the resulting URL on the student's `users` doc — which is
+// what makes it visible to everyone else too (search results, the
+// Re:Lay conversation list, etc. all read from that same doc).
+window.handleAvatarFileChange = async function (event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // so picking the same file again still fires 'change'
+  if (!file || !currentUser) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Please choose an image file', 'error');
+    return;
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    showToast('That image is too large — please choose one under 12MB', 'error');
+    return;
+  }
+
+  avatarUploading = true;
+  refreshAvatarWrap();
+
+  try {
+    const blob = await resizeImageToBlob(file, 480, 0.85);
+    const fileRef = storageRef(storage, `profile-pictures/${currentUser.uid}.jpg`);
+    await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
+    const url = await getDownloadURL(fileRef);
+    // Cache-bust: re-uploading to the same Storage path can return the
+    // same URL, so without this the browser may keep showing the old
+    // cached photo even though the file underneath has changed.
+    const freshUrl = `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+
+    await setDoc(doc(db, 'users', currentUser.uid), { photoURL: freshUrl }, { merge: true });
+    userProfile = { ...(userProfile || {}), photoURL: freshUrl };
+
+    showToast('✓ Profile picture updated', 'success');
+  } catch (err) {
+    console.error('Avatar upload failed:', err);
+    showToast('Could not upload your photo — try again', 'error');
+  } finally {
+    avatarUploading = false;
+    refreshAvatarWrap();
+    populateUserUI();
+  }
+};
+
+function refreshAvatarWrap() {
+  const wrap = document.querySelector('#profileModalContent .my-avatar-wrap');
+  if (!wrap) return;
+  const name = userProfile?.fullName || currentUser?.displayName || 'Student';
+  wrap.outerHTML = avatarWrapHtml(name);
+}
 
 window.handleLogout = async function () {
   try {
