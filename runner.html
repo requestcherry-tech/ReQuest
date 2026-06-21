@@ -169,7 +169,8 @@
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
       background: #111827; color: #fff; padding: 12px 20px;
       border-radius: var(--radius); font-size: 0.85rem; font-weight: 600;
-      z-index: 999; opacity: 0; transition: all .3s; white-space: nowrap;
+      z-index: 999; opacity: 0; transition: all .3s; white-space: normal;
+      max-width: calc(100vw - 40px); text-align: center; line-height: 1.4;
       box-shadow: var(--shadow-lg);
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -299,6 +300,72 @@
     /* ══════════════════════════════════════════════════════════
        RESPONSIVE
     ══════════════════════════════════════════════════════════ */
+
+    /* ── Mobile (phones up to 480px) ────────────────────── */
+    @media (max-width: 480px) {
+      /* Collapse 2-column form grids to single column —
+         half-width inputs (~130px) are too cramped to type in */
+      .form-grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      /* Tighten auth / apply card horizontal padding */
+      .auth-card {
+        padding: 22px 16px;
+      }
+
+      /* Topbar: shrink side padding so items don't overflow */
+      .runner-topbar {
+        padding: 0 10px;
+      }
+      /* Hide the runner name label — badge + button already
+         identify the user, and the name pushes things off-screen */
+      .runner-name {
+        display: none;
+      }
+      /* Compact the Log Out button so it fits beside the badge */
+      .runner-id .btn-ghost {
+        padding: 8px 10px;
+        font-size: 0.78rem;
+      }
+      /* Shrink topbar logo so the back arrow + logo + right-side
+         controls all comfortably share 360px */
+      .runner-topbar .auth-logo {
+        font-size: 1.1rem;
+      }
+
+      /* Slightly tighten feed and filter row for phone gutters */
+      .order-feed {
+        padding: 12px 14px 90px;
+      }
+      .filter-row {
+        padding: 10px 14px;
+      }
+
+      /* Large buttons: reduce vertical padding slightly */
+      .btn-lg {
+        padding: 16px 24px;
+        font-size: 1rem;
+      }
+
+      /* Drawer: reduce padding so content uses available space */
+      .order-drawer {
+        padding: 16px;
+      }
+    }
+
+    /* ── Very small phones (≤ 360px, e.g. iPhone SE 1st gen) ─ */
+    @media (max-width: 360px) {
+      .auth-card {
+        padding: 18px 12px;
+      }
+      .runner-badge {
+        font-size: 0.55rem;
+        padding: 3px 6px;
+      }
+    }
+
+    /* ── Desktop drawer centred ───────────────────────────── */
     @media (min-width: 900px) {
       .order-drawer { max-width: 480px; left: 50%; transform: translateX(-50%) translateY(100%); }
       .order-drawer.open { transform: translateX(-50%) translateY(0); }
