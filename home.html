@@ -636,6 +636,61 @@
     }
 
     /* ══════════════════════════════════════════════════════════
+       PAGE 7 — MY ORDERS (order history + pending), opened from
+       the link inside the cart drawer
+    ══════════════════════════════════════════════════════════ */
+    .cart-myorders-link {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      width: 100%; padding: 11px 14px; margin-bottom: 14px;
+      background: var(--orange-light); color: var(--orange);
+      border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 700;
+      transition: background .15s, color .15s;
+    }
+    .cart-myorders-link:hover { background: var(--orange); color: #fff; }
+    .myorders-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--orange);
+      flex-shrink: 0;
+    }
+    .cart-myorders-link:hover .myorders-dot { background: #fff; }
+
+    .myorders-filter-row {
+      padding: 14px 20px; background: var(--surface);
+      border-bottom: 1px solid var(--border); overflow-x: auto;
+      display: flex; gap: 8px; position: sticky; top: 60px; z-index: 50;
+    }
+    .myorders-filter-row::-webkit-scrollbar { display: none; }
+    .myorders-chip {
+      flex-shrink: 0; padding: 7px 16px; border-radius: 999px;
+      border: 1.5px solid var(--border); font-size: 0.8rem; font-weight: 600;
+      background: var(--surface); color: var(--muted); transition: all .15s;
+    }
+    .myorders-chip.active, .myorders-chip:hover {
+      background: var(--orange); color: #fff; border-color: var(--orange);
+    }
+
+    .myorder-list { padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 12px; }
+    .myorder-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-sm); padding: 16px;
+    }
+    .myorder-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .myorder-id { font-weight: 700; font-size: 0.88rem; }
+    .myorder-date { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+    .myorder-items { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+    .myorder-card-bottom {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border-top: 1px dashed var(--border); padding-top: 12px;
+    }
+    .myorder-total { font-weight: 800; font-size: 1rem; color: var(--orange); }
+    .myorder-note { font-size: 0.78rem; font-weight: 600; color: var(--orange); text-align: right; }
+    .myorder-note-done { color: var(--success); }
+
+    .myorders-empty { text-align: center; padding: 70px 20px; }
+    .myorders-empty-icon { font-size: 2.8rem; margin-bottom: 14px; }
+    .myorders-empty-title { font-weight: 700; font-size: 1rem; color: var(--text); margin-bottom: 6px; }
+    .myorders-empty-sub { font-size: 0.85rem; color: var(--muted); max-width: 280px; margin: 0 auto; line-height: 1.5; }
+
+    /* ══════════════════════════════════════════════════════════
        TOAST NOTIFICATION
     ══════════════════════════════════════════════════════════ */
     .toast {
@@ -1078,6 +1133,10 @@
     <h3 style="font-size:1.05rem;font-weight:700">🛒 Your Order</h3>
     <button class="btn btn-ghost btn-sm" onclick="closeCart()">✕ Close</button>
   </div>
+  <button class="cart-myorders-link" onclick="openMyOrders()">
+    📋 Order History &amp; Pending Orders
+    <span class="myorders-dot hidden" id="myOrdersDot"></span>
+  </button>
   <div id="cartItems"></div>
   <div id="cartEmpty" style="text-align:center;padding:28px 0;color:var(--muted)">
     <div style="font-size:2.5rem;margin-bottom:8px">🛍️</div>
@@ -1645,6 +1704,36 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════
+     PAGE: MY ORDERS — order history + pending
+     (opened via the link inside the cart drawer)
+═══════════════════════════════════════════ -->
+<div class="page" id="pageMyOrders">
+  <nav class="topnav">
+    <button class="btn btn-ghost btn-sm" onclick="goToPage('pageHome')" style="padding:8px">
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="confirm-title" style="font-size:1rem;font-weight:700">My Orders</div>
+    <div style="width:42px"></div>
+  </nav>
+
+  <div class="myorders-filter-row">
+    <button class="myorders-chip active" data-filter="all" onclick="setMyOrdersFilter('all', this)">📋 All</button>
+    <button class="myorders-chip" data-filter="pending" onclick="setMyOrdersFilter('pending', this)">⏳ Pending</button>
+    <button class="myorders-chip" data-filter="accepted" onclick="setMyOrdersFilter('accepted', this)">🏃 Accepted</button>
+    <button class="myorders-chip" data-filter="delivered" onclick="setMyOrdersFilter('delivered', this)">✅ Delivered</button>
+  </div>
+
+  <div class="page-body" style="padding-bottom:40px">
+    <div class="myorder-list" id="myOrdersList"></div>
+    <div class="myorders-empty hidden" id="myOrdersEmpty">
+      <div class="myorders-empty-icon">🧾</div>
+      <div class="myorders-empty-title">No orders here yet</div>
+      <div class="myorders-empty-sub">Your order history and any pending orders will show up here once you place one.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════
      JAVASCRIPT — Firebase v9 Modular SDK
 ══════════════════════════════════════════════════════════ -->
@@ -1666,6 +1755,7 @@ import {
   collection,
   query,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   deleteDoc,
@@ -1706,6 +1796,13 @@ let currentFulfillment = null; // request shown on the fulfillment page
 /* ── Receipt page: live status of the order just placed, so the
    Cancel button disappears the instant a runner accepts ───── */
 let receiptOrderUnsub = null;
+
+/* ── My Orders page: every order in Firestore (all students),
+   filtered down to the signed-in student when rendering. Reusing
+   one always-on listener (like the SOS board) means the list and
+   the dot in the cart drawer stay live without extra reads. ──── */
+let allOrdersFeed   = [];
+let myOrdersFilter  = 'all';
 
 /* ── Stores (24 stalls) ────────────────────────────────────
    To add a new store: copy a block below, give it the next
@@ -2074,6 +2171,10 @@ onAuthStateChanged(auth, async (user) => {
   renderStores();
   updateGreeting();
 
+  // Start watching every order so the My Orders page (and the dot in
+  // the cart drawer) reflect this student's history and pending orders live
+  subscribeToOrdersFeed();
+
   // Hide loading screen
   setTimeout(() => {
     const ls = document.getElementById('loadingScreen');
@@ -2410,6 +2511,14 @@ window.goToPage = function (id) {
     renderSOSBoard();
   }
 
+  // Reset to the "All" tab and re-render every time the page is opened
+  if (id === 'pageMyOrders') {
+    myOrdersFilter = 'all';
+    document.querySelectorAll('#pageMyOrders .myorders-chip').forEach(c => c.classList.remove('active'));
+    document.querySelector('#pageMyOrders .myorders-chip[data-filter="all"]')?.classList.add('active');
+    renderMyOrders();
+  }
+
   // Re-fill confirm form every time user lands on checkout
   if (id === 'pageConfirm') {
     const currentName = document.getElementById('confirmName').value;
@@ -2608,6 +2717,11 @@ window.openCart = function () {
 window.closeCart = function () {
   document.getElementById('cartOverlay').classList.remove('open');
   document.getElementById('cartDrawer').classList.remove('open');
+};
+
+window.openMyOrders = function () {
+  closeCart();
+  goToPage('pageMyOrders');
 };
 
 /* ── Fee calculation helper ────────────────────────────── */
@@ -2867,10 +2981,15 @@ function renderReceiptStatus(orderId, data) {
 // Wrapped in a transaction so a customer can't yank an order out from
 // under a runner who accepted it a split-second earlier — the same
 // safety pattern runner.html uses for acceptOrder/cancelOrder.
-window.cancelMyOrder = async function (orderId) {
+//
+// btnEl is optional: the receipt page's lone button falls back to its
+// id, while the My Orders list (which can render several cancel
+// buttons at once) passes the exact button that was clicked.
+window.cancelMyOrder = async function (orderId, btnEl) {
   if (!confirm("Cancel this order? This can't be undone.")) return;
 
-  const btn = document.getElementById('cancelOrderBtn');
+  const btn = btnEl || document.getElementById('cancelOrderBtn');
+  const originalLabel = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
 
   try {
@@ -2884,18 +3003,123 @@ window.cancelMyOrder = async function (orderId) {
       tx.delete(ref);
     });
     showToast('Order cancelled', 'success');
-    // No need to touch the UI manually — the onSnapshot listener above
-    // sees the deletion and clears the status section on its own.
+    // No need to touch the UI manually — the onSnapshot listener(s) above
+    // see the deletion and re-render on their own (receipt status section
+    // and/or the My Orders list, whichever is currently open).
   } catch (err) {
     if (err.message === 'ALREADY_TAKEN') {
       showToast('Too late — a runner already accepted this order', 'error');
     } else {
       console.error('Cancel order failed:', err);
       showToast('Could not cancel your order. Try again.', 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '✕ Cancel Order'; }
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
     }
   }
 };
+
+/* ══════════════════════════════════════════════════════════
+   MY ORDERS — history + pending, opened from inside the cart
+══════════════════════════════════════════════════════════ */
+
+// One always-on listener for the whole 'orders' collection (same
+// approach runner.html uses), filtered down to this student's own
+// orders wherever it's rendered. Keeps things live with no extra
+// per-page queries, and avoids needing a composite Firestore index.
+function subscribeToOrdersFeed() {
+  const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(200));
+  onSnapshot(q, (snapshot) => {
+    allOrdersFeed = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderMyOrders();
+    updateMyOrdersDot();
+  });
+}
+
+window.setMyOrdersFilter = function (filter, btnEl) {
+  myOrdersFilter = filter;
+  document.querySelectorAll('#pageMyOrders .myorders-chip').forEach(c => c.classList.remove('active'));
+  btnEl.classList.add('active');
+  renderMyOrders();
+};
+
+function renderMyOrders() {
+  const list  = document.getElementById('myOrdersList');
+  const empty = document.getElementById('myOrdersEmpty');
+  if (!list || !empty || !currentUser) return; // page not in DOM yet, or no user
+
+  let mine = allOrdersFeed.filter(o => o.userId === currentUser.uid);
+  if (myOrdersFilter !== 'all') {
+    mine = mine.filter(o => (o.status || 'pending') === myOrdersFilter);
+  }
+
+  if (mine.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = mine.map(myOrderCardHtml).join('');
+}
+
+// A small dot on the cart drawer's "Order History" link, so a student
+// who still has something pending or out for delivery notices it
+// without having to open the page.
+function updateMyOrdersDot() {
+  const dot = document.getElementById('myOrdersDot');
+  if (!dot || !currentUser) return;
+  const hasActive = allOrdersFeed.some(o =>
+    o.userId === currentUser.uid && (o.status || 'pending') !== 'delivered'
+  );
+  dot.classList.toggle('hidden', !hasActive);
+}
+
+function myOrderStatusBadge(o) {
+  const status = o.status || 'pending';
+  if (status === 'delivered') return `<span class="badge badge-green">✅ Delivered</span>`;
+  if (status === 'accepted')  return `<span class="badge badge-blue">🏃 Accepted</span>`;
+  return `<span class="badge badge-yellow">⏳ Pending</span>`;
+}
+
+function formatOrderDate(ts) {
+  if (!ts || typeof ts.toDate !== 'function') return 'Just now';
+  const d = ts.toDate();
+  const dateStr = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+  const timeStr = d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr}, ${timeStr}`;
+}
+
+function myOrderCardHtml(o) {
+  const shortId   = o.id.slice(-6).toUpperCase();
+  const status    = o.status || 'pending';
+  const canCancel = status === 'pending' && !o.riderId;
+  const itemsLine = (o.items || [])
+    .map(it => `${it.emoji} ${escapeHtml(it.name)} ×${it.qty}`)
+    .join(', ');
+
+  let footRight = '';
+  if (canCancel) {
+    footRight = `<button class="btn btn-danger btn-sm" onclick="cancelMyOrder('${o.id}', this)">✕ Cancel</button>`;
+  } else if (status === 'accepted') {
+    footRight = `<span class="myorder-note">🏃 ${escapeHtml(o.riderName || 'A runner')} is on the way</span>`;
+  } else if (status === 'delivered') {
+    footRight = `<span class="myorder-note myorder-note-done">✓ Delivered</span>`;
+  }
+
+  return `
+    <div class="myorder-card">
+      <div class="myorder-card-top">
+        <div>
+          <div class="myorder-id">Order #${shortId}</div>
+          <div class="myorder-date">${formatOrderDate(o.createdAt)}</div>
+        </div>
+        ${myOrderStatusBadge(o)}
+      </div>
+      <div class="myorder-items">${itemsLine || '—'}</div>
+      <div class="myorder-card-bottom">
+        <span class="myorder-total">₱${(o.total || 0).toFixed(2)}</span>
+        ${footRight}
+      </div>
+    </div>`;
+}
 
 /* ══════════════════════════════════════════════════════════
    BORROW — "Campus SOS Board"
